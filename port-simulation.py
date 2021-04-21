@@ -31,17 +31,17 @@ class Ship:
 
         try:
             yield arrived
-            # print(f"@{self.env.now} - Ship can unload")
+            print(f"@{self.env.now} - Ship can unload")
 
             with self.port.unloading_station.request() as req:
-                # print(f"@{self.env.now} - {self.name}: Arrived Unloading Station")
+                print(f"@{self.env.now} - {self.name}: Arrived Unloading Station")
                 yield req
                 print(f"@{self.env.now} - {self.name}: Started Unloading.")
                 yield from self.unload_cargo()
                 print(f"@{self.env.now} - {self.name}: Finnised Unloading.")
 
                 with self.port.fueling_station.request() as req:
-                   # print(f"@{self.env.now} - {self.name}: Arrived Fuel Station")
+                    print(f"@{self.env.now} - {self.name}: Arrived Fuel Station")
                     yield req
                     print(f"@{self.env.now} - {self.name}: Started Fueling.")
                     yield from self.unload_cargo()
@@ -62,7 +62,7 @@ class Port:
             if self.service_line:
                 ship_arrived = self.service_line.popleft()
 
-                with self.fueling_station.request() as ticket:
+                with self.unloading_station.request() as ticket:
                     try:
                         yield ticket
                         ship_arrived.succeed()
@@ -72,12 +72,11 @@ class Port:
             else:
                 self.idle = True
                 print(f"@{self.env.now} - Port waiting for Ships.")
-
                 try:
                     yield self.env.event()
                 except simpy.Interrupt:
                     self.idle = False
-                    print(f"@{self.env.now} - Arraived ships at Port.")
+                    print(f"@{self.env.now} - Ships arrived at Port.")
 
 
 def generate_ships(env, unloading_station, fueling_station):
