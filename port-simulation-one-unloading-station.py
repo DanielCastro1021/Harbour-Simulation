@@ -204,6 +204,6 @@ def main(time, number_of_unloading_stations, number_of_refueling_stations):
 
 if __name__ == "__main__":
     time = 100
-    number_of_unloading_stations = 3
+    number_of_unloading_stations = 1
     number_of_refueling_stations = 1
     main(time, number_of_unloading_stations, number_of_refueling_stations)
