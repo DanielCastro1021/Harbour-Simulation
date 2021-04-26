@@ -1,9 +1,22 @@
-
 import simpy
 import numpy
+import pandas
 import random
 import matplotlib.pyplot as plt
 from collections import deque
+
+
+def poisson_distribution():
+    return numpy.random.poisson(lam=10, size=1)[0]
+
+
+def gamma_distribution():
+    return numpy.random.gamma(shape=10, size=1)[0]
+
+
+def studied_distribuition():
+    return numpy.random.choice(numpy.arange(5, 19), p=[
+        0.01, 0.03, 0.06, 0.07, 0.09, 0.1, 0.11, 0.11, 0.11, 0.09, 0.07, 0.06, 0.05, 0.04])
 
 
 class ShipException(Exception):
@@ -12,11 +25,11 @@ class ShipException(Exception):
 
 class Ship:
 
-    def __init__(self, env, port, unload_time, refuel_time, name):
+    def __init__(self, env, port, arrival_time, unload_time, refuel_time, name):
         self.env, self.port, self.name = env, port, name
-        self.unload_time, self.refuel_time, =  unload_time, refuel_time
-        self.waiting_unload_time, self.waiting_refuel_time = 0, 0
         self.unloaded, self.refueled = False, False
+        self.arrival_time, self.unload_time, self.refuel_time, =  arrival_time, unload_time, refuel_time
+        self.waiting_unload_time, self.waiting_refuel_time = numpy.NaN, numpy.NaN
         self.env.process(self.run_life_cicle())
 
     def enter_unloading_queue(self):
@@ -79,6 +92,18 @@ class Ship:
         except ShipException:
             print(f"@{self.env.now} - Ship cannot get an fueling dock.")
 
+    def to_dataframe(self):
+        return {
+            'name': self.name,
+            'unloaded': self.unloaded,
+            'refueled': self.refueled,
+            'arrival_time': self.arrival_time,
+            'unload_time': self.arrival_time,
+            'refuel_time': self.refuel_time,
+            'waiting_unload_time': self.waiting_refuel_time,
+            'waiting_refuel_time': self.waiting_refuel_time,
+        }
+
 
 class Port:
     def __init__(self, env, unloading_station, refueling_station):
@@ -114,59 +139,62 @@ class Port:
                     # print(f"@{self.env.now} - Ships are waiting for service.")
 
 
-def generate_ships(env, time, unloading_station, refueling_station):
+def generate_ships(env, time, unloading_station, refueling_station, arrival_distribution, unload_distribution, refuel_distribution):
     i = 0
     ships = []
     port = Port(env, unloading_station, refueling_station)
 
     while True:
-
-        arrival_time = numpy.random.choice(numpy.arange(5, 19), p=[
-            0.01, 0.03, 0.06, 0.07, 0.09, 0.1, 0.11, 0.11, 0.11, 0.09, 0.07, 0.06, 0.05, 0.04])
-
-        unload_time = numpy.random.choice(numpy.arange(9, 17), p=[
-            0.2, 0.22, 0.19, 0.16, 0.1, 0.08, 0.03, 0.02])
-
-        refuel_time = numpy.random.choice(numpy.arange(9, 17), p=[
-            0.2, 0.22, 0.19, 0.16, 0.1, 0.08, 0.03, 0.02])
+        arrival_time = arrival_distribution()
+        unload_time = unload_distribution()
+        refuel_time = refuel_distribution()
 
         if (env.now + arrival_time) >= time:
             return ships, port
         else:
             yield env.timeout(random.randint(0, arrival_time))
             i += 1
-            ships.append(Ship(env, port, unload_time,
+            ships.append(Ship(env, port, arrival_time, unload_time,
                          refuel_time, name=f"Ship {i}"))
 
 
-def stats_and_graphs(ships, port):
+def simulation(env, time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
+    unloading_stations = simpy.Resource(env, number_of_unloading_stations)
+    refueling_stations = simpy.Resource(env, number_of_refueling_stations)
+    ships, port = yield env.process(generate_ships(env, time, unloading_stations, refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
+    simulation_report(ships, port, arrival_distribution,
+                      unload_distribution, refuel_distribution)
+
+
+def simulation_report(ships, port, arrival_distribution, unload_distribution, refuel_distribution):
     plt.figure(1)
-    filename = "img/unload.jpg"
+    filename = f"img/unload_{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}.png"
 
     Y = [(ship.waiting_unload_time)
          for ship in ships if ship.unloaded == True]
     X = range(0, len(Y))
 
     plt.plot(X, Y, "-o")
-    plt.xlabel("Number of ships")
+    plt.xlabel("Number of ship")
     plt.ylabel("Waiting time for unloading")
     plt.xticks(X)
     plt.savefig(filename)
     #!!! ----------
     plt.figure(2)
-    filename = "img/refuel.jpg"
+    filename = f"img/refuel_{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}.png"
+
     Y = [(ship.waiting_refuel_time)
          for ship in ships if ship.refueled == True]
     X = range(0, len(Y))
 
     plt.plot(X, Y, "-o")
-    plt.xlabel("Number of ships")
+    plt.xlabel("Number of ship")
     plt.ylabel("Waiting time for unloading")
     plt.xticks(X)
     plt.savefig(filename)
     #!!! ----------
     plt.figure(3)
-    filename = "img/unload_queue.jpg"
+    filename = f"img/unload_queue_{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}.png"
     X = [timestamp[0]for timestamp in port.unloading_service_line_history]
     Y = [timestamp[1]for timestamp in port.unloading_service_line_history]
 
@@ -177,7 +205,7 @@ def stats_and_graphs(ships, port):
     plt.savefig(filename)
     #!!! ----------
     plt.figure(4)
-    filename = "img/refuel_queue.jpg"
+    filename = f"img/refuel_queue_{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}.png"
     X = [timestamp[0]for timestamp in port.refueling_service_line_history]
     Y = [timestamp[1]for timestamp in port.refueling_service_line_history]
 
@@ -187,23 +215,40 @@ def stats_and_graphs(ships, port):
     plt.xticks(X)
     plt.savefig(filename)
 
+    df_ships = pandas.DataFrame.from_records([s.to_dataframe() for s in ships])
 
-def simulation(env, time, number_of_unloading_stations, number_of_refueling_stations):
-    unloading_stations = simpy.Resource(env, number_of_unloading_stations)
-    refueling_stations = simpy.Resource(env, number_of_refueling_stations)
-    ships, port = yield env.process(generate_ships(env, time, unloading_stations, refueling_stations))
-    stats_and_graphs(ships, port)
+    df_unloaded = pandas.DataFrame.from_records([s.to_dataframe() for s in [ship
+                                                                            for ship in ships if ship.unloaded == True]])
+    df_refueled = pandas.DataFrame.from_records([s.to_dataframe() for s in [ship
+                                                                            for ship in ships if ship.refueled == True]])
+
+    df_unloaded.drop(
+        columns=['arrival_time',  'refuel_time', 'waiting_refuel_time'], inplace=True)
+    df_refueled.drop(
+        columns=['arrival_time', 'unload_time', 'waiting_unload_time'], inplace=True)
+
+    print(df_unloaded.describe())
+    print(df_refueled.describe())
 
 
-def main(time, number_of_unloading_stations, number_of_refueling_stations):
+def main(time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
     env = simpy.Environment()
     env.process(simulation(env, time, number_of_unloading_stations,
-                number_of_refueling_stations))
+                number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
     env.run(until=(time + 5))
 
 
 if __name__ == "__main__":
-    time = 100
+    distributions = {0: poisson_distribution,
+                     1: gamma_distribution, 2: studied_distribuition}
+
+    arrival_distribution = distributions.get(0)
+    unload_distribution = distributions.get(0)
+    refuel_distribution = distributions.get(0)
+
+    time = 8*30
     number_of_unloading_stations = 1
     number_of_refueling_stations = 1
-    main(time, number_of_unloading_stations, number_of_refueling_stations)
+
+    main(time, number_of_unloading_stations, number_of_refueling_stations,
+         arrival_distribution, unload_distribution, refuel_distribution)
