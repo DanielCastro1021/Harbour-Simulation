@@ -139,26 +139,11 @@ class Port:
                     # print(f"@{self.env.now} - Ships are waiting for service.")
 
 
-def generate_ships(env, time, unloading_station, refueling_station, arrival_distribution, unload_distribution, refuel_distribution):
-    i = 0
-    ships = []
-    port = Port(env, unloading_station, refueling_station)
-
-    while True:
-        arrival_time = arrival_distribution()
-        unload_time = unload_distribution()
-        refuel_time = refuel_distribution()
-
-        if (env.now + arrival_time) >= time:
-            return ships, port
-        else:
-            yield env.timeout(random.randint(0, arrival_time))
-            i += 1
-            ships.append(Ship(env, port, arrival_time, unload_time,
-                         refuel_time, name=f"Ship {i}"))
-
-
 def simulation_statistics(ships):
+    directory = f"data/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     df_unloaded = pandas.DataFrame.from_records([s.to_dataframe() for s in [ship
                                                                             for ship in ships if ship.unloaded == True]])
     df_refueled = pandas.DataFrame.from_records([s.to_dataframe() for s in [ship
@@ -169,8 +154,8 @@ def simulation_statistics(ships):
     df_refueled.drop(
         columns=['arrival_time', 'unload_time', 'waiting_unload_time'], inplace=True)
 
-    print(df_unloaded.describe())
-    print(df_refueled.describe())
+    df_unloaded.describe().to_csv(f"{directory}/unloads.csv")
+    df_refueled.describe().to_csv(f"{directory}/refuels.csv")
 
 
 def simulation_graphs_unload_process(ships, port, arrival_distribution, unload_distribution, refuel_distribution):
@@ -244,10 +229,29 @@ def simulation_report(ships, port, arrival_distribution, unload_distribution, re
         ships, port, arrival_distribution, unload_distribution, refuel_distribution)
 
 
+def simulation_process(env, time, unloading_station, refueling_station, arrival_distribution, unload_distribution, refuel_distribution):
+    i = 0
+    ships = []
+    port = Port(env, unloading_station, refueling_station)
+
+    while True:
+        arrival_time = arrival_distribution()
+        unload_time = unload_distribution()
+        refuel_time = refuel_distribution()
+
+        if (env.now + arrival_time) >= time:
+            return ships, port
+        else:
+            yield env.timeout(random.randint(0, arrival_time))
+            i += 1
+            ships.append(Ship(env, port, arrival_time, unload_time,
+                         refuel_time, name=f"Ship {i}"))
+
+
 def simulation(env, time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
     unloading_stations = simpy.Resource(env, number_of_unloading_stations)
     refueling_stations = simpy.Resource(env, number_of_refueling_stations)
-    ships, port = yield env.process(generate_ships(env, time, unloading_stations, refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
+    ships, port = yield env.process(simulation_process(env, time, unloading_stations, refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
     simulation_report(ships, port, arrival_distribution,
                       unload_distribution, refuel_distribution)
 

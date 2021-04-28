@@ -1,4 +1,6 @@
 .vscode/
 /img
+/data
 SO-TP1.pdf
 .vscode/settings.json
+.DS_Store
