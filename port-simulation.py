@@ -9,11 +9,11 @@ from collections import deque
 
 
 def binomial_distribution(values):
-    return numpy.random.binomial(n=numpy.mean(numpy.arange(values[0], (values[1]+1))), p=0.5, size=100)
+    return numpy.random.binomial(n=numpy.mean(numpy.arange(values[0], (values[1]+1))), p=0.5)
 
 
 def poisson_distribution(values):
-    return numpy.random.poisson(lam=numpy.mean(numpy.arange(values[0], (values[1]+1))), size=100)
+    return numpy.random.poisson(lam=numpy.mean(numpy.arange(values[0], (values[1]+1))))
 
 
 class ShipException(Exception):
