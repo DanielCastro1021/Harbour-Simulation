@@ -1,4 +1,3 @@
-from numpy.core.fromnumeric import size
 import simpy
 import numpy
 import pandas
@@ -6,6 +5,8 @@ import random
 import os
 import matplotlib.pyplot as plt
 from collections import deque
+from functools import partial, wraps
+from random import randrange
 
 
 def binomial_distribution(values):
@@ -136,6 +137,20 @@ class Port:
                     # print(f"@{self.env.now} - Ships are waiting for service.")
 
 
+class MonitoredResource(simpy.Resource):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.data = []
+
+    def request(self, *args, **kwargs):
+        self.data.append((self._env.now, self.count))
+        return super().request(*args, **kwargs)
+
+    def release(self, *args, **kwargs):
+        self.data.append((self._env.now, self.count))
+        return super().release(*args, **kwargs)
+
+
 def simulation_statistics(ships, number_of_unloading_stations):
     directory = f"data/unloading-stations-scenary-{number_of_unloading_stations}/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
     if not os.path.exists(directory):
@@ -167,29 +182,27 @@ def simulation_graphs_unload_process(ships, port, arrival_distribution, unload_d
         os.makedirs(directory)
 
     # ! Waiting
-    plt.figure(1)
+    plt.figure(randrange(10000))
     filename = f"{directory}/unload.png"
 
     Y = [(ship.waiting_unload_time)
          for ship in ships if ship.unloaded == True]
     X = range(0, len(Y))
-
     plt.plot(X, Y, "-o")
     plt.xlabel("Number of ship")
     plt.ylabel("Waiting time for unloading")
-    plt.xticks(X)
+    plt.xticks(numpy.arange(min(X), max(X)+5, 5.0))
     plt.savefig(filename)
 
     # ! Queue
-    plt.figure(3)
+    plt.figure(randrange(10000))
     filename = f"{directory}/unload_queue.png"
     X = [timestamp[0]for timestamp in port.unloading_service_line_history]
     Y = [timestamp[1]for timestamp in port.unloading_service_line_history]
-
     plt.plot(X, Y, "-o")
     plt.xlabel("Time")
     plt.ylabel("Unloading Queue Lenght")
-    plt.xticks(X)
+    plt.xticks(numpy.arange(min(X), max(X)+20, 20.0))
     plt.savefig(filename)
 
 
@@ -198,29 +211,58 @@ def simulation_graphs_refuel_process(ships, port, arrival_distribution, unload_d
     if not os.path.exists(directory):
         os.makedirs(directory)
     # ! Waiting
-    plt.figure(2)
+    plt.figure(randrange(10000))
     filename = f"{directory}/refuel.png"
 
     Y = [(ship.waiting_refuel_time)
          for ship in ships if ship.refueled == True]
     X = range(0, len(Y))
-
     plt.plot(X, Y, "-o")
     plt.xlabel("Number of ship")
     plt.ylabel("Waiting time for refueling")
-    plt.xticks(X)
+    plt.xticks(numpy.arange(min(X), max(X)+5, 5.0))
     plt.savefig(filename)
 
     # ! Queue
-    plt.figure(4)
+    plt.figure(randrange(10000))
     filename = f"{directory}/refuel_queue.png"
     X = [timestamp[0]for timestamp in port.refueling_service_line_history]
     Y = [timestamp[1]for timestamp in port.refueling_service_line_history]
-
     plt.plot(X, Y, "-o")
     plt.xlabel("Time")
     plt.ylabel("Refueling Queue Lenght")
-    plt.xticks(X)
+    plt.xticks(numpy.arange(min(X), max(X)+20, 20.0))
+    plt.savefig(filename)
+
+
+def simulation_graphs_resource_monitoring(unloading_stations_usage, refueling_stations_usage):
+
+    directory = f"img/unloading-stations-scenary-{number_of_unloading_stations}/resources/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    # ! Waiting
+
+    plt.figure(randrange(10000), figsize=(15, 4))
+    filename = f"{directory}/unload_resource.png"
+    Y = [resource[1]for resource in unloading_stations_usage]
+    X = [resource[0]for resource in unloading_stations_usage]
+    plt.plot(X, Y, "-o")
+    plt.xlabel("Time")
+    plt.ylabel("Number of unload resources")
+    plt.xticks(numpy.arange(min(X), max(X)+20, 20.0))
+    plt.savefig(filename)
+
+    # ! Queue
+    plt.figure(randrange(10000), figsize=(15, 4))
+    filename = f"{directory}/refuel_resource.png"
+
+    Y = [resource[1]for resource in refueling_stations_usage]
+    X = [resource[0]for resource in refueling_stations_usage]
+    plt.plot(X, Y, "-o")
+    plt.xlabel("Time")
+    plt.ylabel("Number of refuel resources")
+    plt.xticks(numpy.arange(min(X), max(X)+20, 20.0))
     plt.savefig(filename)
 
 
@@ -252,11 +294,14 @@ def simulation_process(env, time, unloading_station, refueling_station, arrival_
 
 
 def simulation(env, time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
-    unloading_stations = simpy.Resource(env, number_of_unloading_stations)
-    refueling_stations = simpy.Resource(env, number_of_refueling_stations)
+    unloading_stations = MonitoredResource(
+        env, capacity=number_of_unloading_stations)
+    refueling_stations = MonitoredResource(env, number_of_refueling_stations)
     ships, port = yield env.process(simulation_process(env, time, unloading_stations, refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
     simulation_report(ships, port, arrival_distribution,
                       unload_distribution, refuel_distribution, number_of_unloading_stations)
+    simulation_graphs_resource_monitoring(
+        unloading_stations.data, refueling_stations.data)
 
 
 def main(time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
