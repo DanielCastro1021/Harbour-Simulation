@@ -1,3 +1,4 @@
+from numpy.core.fromnumeric import size
 import simpy
 import numpy
 import pandas
@@ -8,15 +9,11 @@ from collections import deque
 
 
 def binomial_distribution(values):
-    return numpy.random.binomial(n=numpy.mean(numpy.arange(values[0], (values[1]+1))), p=0.5)
+    return numpy.random.binomial(n=numpy.mean(numpy.arange(values[0], (values[1]+1))), p=0.5, size=100)
 
 
 def poisson_distribution(values):
-    return numpy.random.poisson(lam=numpy.mean(numpy.arange(values[0], (values[1]+1))))
-
-
-def gamma_distribution(values):
-    return numpy.random.gamma(shape=numpy.mean(numpy.arange(values[0], (values[1]+1))))
+    return numpy.random.poisson(lam=numpy.mean(numpy.arange(values[0], (values[1]+1))), size=100)
 
 
 class ShipException(Exception):
@@ -139,8 +136,8 @@ class Port:
                     # print(f"@{self.env.now} - Ships are waiting for service.")
 
 
-def simulation_statistics(ships):
-    directory = f"data/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
+def simulation_statistics(ships, number_of_unloading_stations):
+    directory = f"data/unloading-stations-scenary-{number_of_unloading_stations}/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -154,12 +151,18 @@ def simulation_statistics(ships):
     df_refueled.drop(
         columns=['arrival_time', 'unload_time', 'waiting_unload_time'], inplace=True)
 
+    df_total_time_in_port = pandas.DataFrame()
+    df_total_time_in_port['total_time'] = df_unloaded['unload_time'] + \
+        df_unloaded['waiting_unload_time'] + \
+        df_refueled['refuel_time']+df_refueled['waiting_refuel_time']
+
     df_unloaded.describe().to_csv(f"{directory}/unloads.csv")
     df_refueled.describe().to_csv(f"{directory}/refuels.csv")
+    df_total_time_in_port.describe().to_csv(f"{directory}/time_in_port.csv")
 
 
-def simulation_graphs_unload_process(ships, port, arrival_distribution, unload_distribution, refuel_distribution):
-    directory = f"img/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
+def simulation_graphs_unload_process(ships, port, arrival_distribution, unload_distribution, refuel_distribution, number_of_unloading_stations):
+    directory = f"img/unloading-stations-scenary-{number_of_unloading_stations}/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -190,8 +193,8 @@ def simulation_graphs_unload_process(ships, port, arrival_distribution, unload_d
     plt.savefig(filename)
 
 
-def simulation_graphs_refuel_process(ships, port, arrival_distribution, unload_distribution, refuel_distribution):
-    directory = f"img/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
+def simulation_graphs_refuel_process(ships, port, arrival_distribution, unload_distribution, refuel_distribution, number_of_unloading_stations):
+    directory = f"img/unloading-stations-scenary-{number_of_unloading_stations}/{arrival_distribution.__name__}_{unload_distribution.__name__}_{refuel_distribution.__name__}"
     if not os.path.exists(directory):
         os.makedirs(directory)
     # ! Waiting
@@ -221,12 +224,12 @@ def simulation_graphs_refuel_process(ships, port, arrival_distribution, unload_d
     plt.savefig(filename)
 
 
-def simulation_report(ships, port, arrival_distribution, unload_distribution, refuel_distribution):
-    simulation_statistics(ships)
+def simulation_report(ships, port, arrival_distribution, unload_distribution, refuel_distribution, number_of_unloading_stations):
+    simulation_statistics(ships, number_of_unloading_stations)
     simulation_graphs_unload_process(
-        ships, port, arrival_distribution, unload_distribution, refuel_distribution)
+        ships, port, arrival_distribution, unload_distribution, refuel_distribution, number_of_unloading_stations)
     simulation_graphs_refuel_process(
-        ships, port, arrival_distribution, unload_distribution, refuel_distribution)
+        ships, port, arrival_distribution, unload_distribution, refuel_distribution, number_of_unloading_stations)
 
 
 def simulation_process(env, time, unloading_station, refueling_station, arrival_distribution, unload_distribution, refuel_distribution):
@@ -253,7 +256,7 @@ def simulation(env, time, number_of_unloading_stations, number_of_refueling_stat
     refueling_stations = simpy.Resource(env, number_of_refueling_stations)
     ships, port = yield env.process(simulation_process(env, time, unloading_stations, refueling_stations, arrival_distribution, unload_distribution, refuel_distribution))
     simulation_report(ships, port, arrival_distribution,
-                      unload_distribution, refuel_distribution)
+                      unload_distribution, refuel_distribution, number_of_unloading_stations)
 
 
 def main(time, number_of_unloading_stations, number_of_refueling_stations, arrival_distribution, unload_distribution, refuel_distribution):
@@ -264,9 +267,7 @@ def main(time, number_of_unloading_stations, number_of_refueling_stations, arriv
 
 
 if __name__ == "__main__":
-
-    distributions = {0: poisson_distribution, 1: binomial_distribution,
-                     2: gamma_distribution}
+    distributions = {0: poisson_distribution, 1: binomial_distribution}
 
     # ! Define Distribution To Use For Each Process
     arrival_distribution = distributions.get(0)
